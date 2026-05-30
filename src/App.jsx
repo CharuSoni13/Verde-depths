@@ -1,5 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 
+// Modular Component Imports
+import Preloader from './components/Preloader';
+import Navbar from './components/Navbar';
+import SpecsTabs from './components/SpecsTabs';
+import StrapConfigurator from './components/StrapConfigurator';
+import ConciergeScheduler from './components/ConciergeScheduler';
+import CartDrawer from './components/CartDrawer';
+
 // Configuration
 const frameCount = 240;
 
@@ -29,22 +37,14 @@ export default function App() {
   const [scrolled, setScrolled] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
 
-  // --- NEW UPGRADE STATES ---
-  // 1. Soundscape Engine States
+  // Upgrade States
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
-  
-  // 2. VIP Checkout Drawer States
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [cartSuccess, setCartSuccess] = useState(false);
+  const [selectedStrap, setSelectedStrap] = useState('textile');
+  const [activeSpecTab, setActiveSpecTab] = useState('movement');
   
-  // 3. Strap Configurator States
-  const [selectedStrap, setSelectedStrap] = useState('textile'); // 'textile' | 'rubber' | 'titanium'
-  
-  // 4. Movement Specs Tabs States
-  const [activeSpecTab, setActiveSpecTab] = useState('movement'); // 'movement' | 'casing' | 'dive'
-  
-  // 5. Multi-Step Concierge Booking States
-  const [bookingStep, setBookingStep] = useState(0); // 0: Boutique, 1: Date/Time, 2: Client Info, 3: Success
+  const [bookingStep, setBookingStep] = useState(0);
   const [bookingData, setBookingData] = useState({
     boutique: 'Geneva Boutique',
     date: '2026-06-01',
@@ -69,10 +69,38 @@ export default function App() {
   // Interpolation States (useRef to avoid re-renders during 60fps canvas loop)
   const currentFrameRef = useRef(0);
   const targetFrameRef = useRef(0);
-  const ease = 0.08; // Heavy premium momentum damping
+  const ease = 0.08; // Damping coefficient
 
-  // --- AUDIO SYNTHESIS PIPELINE ---
-  // Initialize continuous deep-sea hum hum and gain filters
+  // --- 1. VIEWPORT INTERSECTION OBSERVER TRIGGER (SNAPPY CARD REVEALS) ---
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    // Decouple text revealing from strict scroll boundaries
+    // Trigger instantly as soon as 15% of the section is visible in the viewport
+    const observerOptions = {
+      root: null,
+      rootMargin: '0px',
+      threshold: 0.15 
+    };
+
+    const observerCallback = (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('reveal-active');
+        }
+      });
+    };
+
+    const observer = new IntersectionObserver(observerCallback, observerOptions);
+    const sections = document.querySelectorAll('.scroll-section');
+    sections.forEach((section) => observer.observe(section));
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [isLoaded]);
+
+  // --- 2. AUDIO SYNTHESIS ENGINE (ZERO-LATENCY WEB AUDIO API) ---
   const initAudioEngine = () => {
     if (audioCtxRef.current) return;
 
@@ -81,17 +109,14 @@ export default function App() {
       const ctx = new AudioContext();
       audioCtxRef.current = ctx;
 
-      // Triangle wave oscillator for thick under-water hum (55Hz - A1 note)
       const osc = ctx.createOscillator();
       osc.type = 'triangle';
       osc.frequency.setValueAtTime(55, ctx.currentTime);
 
-      // Muffled lowpass filter to represent submerged ocean environment
       const filter = ctx.createBiquadFilter();
       filter.type = 'lowpass';
       filter.frequency.setValueAtTime(110, ctx.currentTime);
 
-      // Low volume gain to be subtle background sound
       const gain = ctx.createGain();
       gain.gain.setValueAtTime(0.06, ctx.currentTime);
 
@@ -103,11 +128,10 @@ export default function App() {
       ambientOscRef.current = osc;
       ambientGainRef.current = gain;
     } catch (err) {
-      console.warn('Web Audio API not fully supported or blocked by browser permission.', err);
+      console.warn('Web Audio synthesis is blocked by browser interaction guidelines.', err);
     }
   };
 
-  // Toggle ambient synth track
   const handleAudioToggle = () => {
     if (!audioCtxRef.current) {
       initAudioEngine();
@@ -117,22 +141,19 @@ export default function App() {
     if (!ctx) return;
 
     if (isAudioPlaying) {
-      // Fade out gain cleanly
       ambientGainRef.current?.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
       setTimeout(() => {
         if (ctx.state === 'running') ctx.suspend();
       }, 500);
       setIsAudioPlaying(false);
     } else {
-      // Resume context & fade gain back in
       if (ctx.state === 'suspended') ctx.resume();
       ambientGainRef.current?.gain.exponentialRampToValueAtTime(0.06, ctx.currentTime + 0.5);
       setIsAudioPlaying(true);
-      playBezelTick(); // Audio feedback click
+      playBezelTick();
     }
   };
 
-  // Programmatic watch bezel click synthesizer
   const playBezelTick = () => {
     if (!audioCtxRef.current || audioCtxRef.current.state !== 'running') return;
     
@@ -142,11 +163,9 @@ export default function App() {
       const gain = ctx.createGain();
 
       osc.type = 'sine';
-      // Fast exponential pitch drop to mimic mechanical metallic snap
       osc.frequency.setValueAtTime(900, ctx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 0.04);
 
-      // Rapid volume decay
       gain.gain.setValueAtTime(0.04, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.04);
 
@@ -155,18 +174,17 @@ export default function App() {
       osc.start();
       osc.stop(ctx.currentTime + 0.05);
     } catch (err) {
-      // Audio node fails gracefully
+      // Node decay fails gracefully
     }
   };
 
-  // Hook hover events to play tick sounds
   const handleHoverEvent = () => {
     if (isAudioPlaying) {
       playBezelTick();
     }
   };
 
-  // ASYNCHRONOUS PRELOADER PIPELINE
+  // --- 3. ASYNCHRONOUS PRELOADER PIPELINE ---
   useEffect(() => {
     let loadedCount = 0;
     const imagesArray = [];
@@ -198,7 +216,7 @@ export default function App() {
     }
   }, []);
 
-  // CANVAS COVER SCALE CALCULATION
+  // --- 4. CANVAS COVER ASPECT-RATIO SCALE ---
   const scaleCanvasCover = (canvas, ctx, img) => {
     if (!img || !img.complete) return;
 
@@ -237,7 +255,7 @@ export default function App() {
     ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
   };
 
-  // CANVAS RENDER LOOP (LERPed)
+  // --- 5. CANVAS RENDER LOOP (LERPed Scroll Animation) ---
   useEffect(() => {
     if (!isLoaded || !canvasRef.current) return;
 
@@ -271,7 +289,7 @@ export default function App() {
     };
   }, [isLoaded]);
 
-  // SCROLL & WINDOW RESIZE HANDLERS
+  // --- 6. SCROLL AND RESIZE EVENT BINDINGS ---
   useEffect(() => {
     if (!isLoaded) return;
 
@@ -284,10 +302,13 @@ export default function App() {
       if (maxScroll <= 0) return;
 
       const scrollFraction = Math.min(1, Math.max(0, scrollTop / maxScroll));
+      
+      // Drive watch disassembling sequence frame index smoothly on scroll
       targetFrameRef.current = Math.min(frameCount - 1, Math.floor(scrollFraction * frameCount));
 
       setScrolled(scrollTop > 50);
 
+      // Coordinate navbar link highlights
       const percent = scrollFraction * 100;
       let activeIdx = 0;
 
@@ -327,7 +348,7 @@ export default function App() {
     };
   }, [isLoaded]);
 
-  // PROCEDURAL BUBBLE GENERATOR
+  // --- 7. AMBIENT BUBBLES BACKGROUND LERPER ---
   useEffect(() => {
     if (!isLoaded || !bubblesContainerRef.current) return;
 
@@ -377,7 +398,7 @@ export default function App() {
     };
   }, [isLoaded]);
 
-  // Clean up global audio on unmount
+  // Clean up global audio ref on unmount
   useEffect(() => {
     return () => {
       ambientOscRef.current?.stop();
@@ -385,108 +406,29 @@ export default function App() {
     };
   }, []);
 
-  // VIP Checkout form submissions
-  const handleCheckoutSubmit = (e) => {
-    e.preventDefault();
-    playBezelTick();
-    setCartSuccess(true);
-  };
-
-  // Concierge booking inputs
   const handleBookingChange = (field, value) => {
     setBookingData(prev => ({ ...prev, [field]: value }));
   };
 
-  // Calendar dates mock (June 1st to June 7th)
-  const availableDates = [
-    { label: 'MON // JUN 1', val: '2026-06-01' },
-    { label: 'TUE // JUN 2', val: '2026-06-02' },
-    { label: 'WED // JUN 3', val: '2026-06-03' },
-    { label: 'THU // JUN 4', val: '2026-06-04' },
-    { label: 'FRI // JUN 5', val: '2026-06-05' },
-    { label: 'SAT // JUN 6', val: '2026-06-06' }
-  ];
-
-  const availableTimes = ['10:00 AM', '12:30 PM', '02:00 PM', '04:30 PM', '06:00 PM'];
-
-  const loaderOffset = 283 - (283 * (loadingProgress / 100));
-
   return (
     <>
-      {/* 1. PREMIUM METRIC-STYLE PRELOADER */}
-      <div id="preloader" className={`preloader-overlay ${isLoaded ? 'fade-out' : ''}`}>
-        <div className="preloader-content">
-          <div className="preloader-glow"></div>
-          
-          <div className="circular-indicator">
-            <svg className="gear-ring" viewBox="0 0 100 100">
-              <circle className="gear-track" cx="50" cy="50" r="45"></circle>
-              <circle 
-                className="gear-progress" 
-                cx="50" 
-                cy="50" 
-                r="45"
-                style={{ strokeDasharray: 283, strokeDashoffset: loaderOffset }}
-              ></circle>
-            </svg>
-            <div className="loader-percentage">{String(loadingProgress).padStart(2, '0')}</div>
-          </div>
-          
-          <div className="loader-status">
-            <div className="status-title">CFB CALIBRE INIT</div>
-            <div className="status-sub">{loaderStatus}</div>
-          </div>
-          
-          <div className="loader-tech-metrics">
-            <span>EST. DEPTH CRIT: 500M</span>
-            <span className="pulse-indicator">● OPERATIONAL</span>
-            <span>CAL. CFB A2050</span>
-          </div>
-        </div>
-      </div>
+      {/* 1. PREMIUM MECHANICAL PRELOADER */}
+      <Preloader 
+        loadingProgress={loadingProgress}
+        loaderStatus={loaderStatus}
+        isLoaded={isLoaded}
+      />
 
-      {/* 2. APPLE-STYLE ULTRA-MINIMAL TOP NAV BAR WITH SOUND TOGGLE */}
-      <nav className={`nav-bar ${scrolled ? 'scrolled' : ''}`} style={{ opacity: isLoaded ? 1 : 0 }}>
-        <div className="nav-container">
-          <a href="#" className="nav-brand" onMouseEnter={handleHoverEvent}>
-            <span className="brand-brand">Carl F. Bucherer</span>
-            <span className="brand-divider">|</span>
-            <span className="brand-model">Patravi ScubaTec Verde</span>
-          </a>
-          
-          <div className="nav-links">
-            <a href="#overview" className={`nav-link ${activeIndex === 0 ? 'active' : ''}`} onMouseEnter={handleHoverEvent}>Overview</a>
-            <a href="#craftsmanship" className={`nav-link ${activeIndex === 1 ? 'active' : ''}`} onMouseEnter={handleHoverEvent}>Craftsmanship</a>
-            <a href="#movement" className={`nav-link ${activeIndex === 2 ? 'active' : ''}`} onMouseEnter={handleHoverEvent}>Movement</a>
-            <a href="#specs" className={`nav-link ${activeIndex === 3 ? 'active' : ''}`} onMouseEnter={handleHoverEvent}>Specs</a>
-            <a href="#boutique" className={`nav-link ${activeIndex === 4 ? 'active' : ''}`} onMouseEnter={handleHoverEvent}>Boutique</a>
-          </div>
-          
-          <div className="nav-controls-group">
-            {/* Audio Wave Controller Button */}
-            <button 
-              className={`audio-wave-btn ${isAudioPlaying ? 'active' : ''}`} 
-              onClick={handleAudioToggle}
-              onMouseEnter={handleHoverEvent}
-              title={isAudioPlaying ? 'Mute Soundscape' : 'Play Immersive Soundscape'}
-            >
-              <div className="wave-bar bar-1"></div>
-              <div className="wave-bar bar-2"></div>
-              <div className="wave-bar bar-3"></div>
-              <div className="wave-bar bar-4"></div>
-              <span className="audio-btn-label">{isAudioPlaying ? 'AMBIENT ON' : 'SOUND ON'}</span>
-            </button>
-
-            <button 
-              className="cta-button" 
-              onClick={() => { playBezelTick(); setIsCartOpen(true); }}
-              onMouseEnter={handleHoverEvent}
-            >
-              Experience Patravi
-            </button>
-          </div>
-        </div>
-      </nav>
+      {/* 2. APPLE-STYLE ULTRA-MINIMAL TOP NAV BAR */}
+      <Navbar 
+        scrolled={scrolled}
+        isLoaded={isLoaded}
+        activeIndex={activeIndex}
+        isAudioPlaying={isAudioPlaying}
+        handleAudioToggle={handleAudioToggle}
+        handleHoverEvent={handleHoverEvent}
+        setIsCartOpen={setIsCartOpen}
+      />
 
       {/* 3. STICKY VIEWPORT CANVAS WRAPPER */}
       <div className="canvas-wrapper">
@@ -497,11 +439,11 @@ export default function App() {
         {isLoaded && <canvas id="watch-canvas" ref={canvasRef}></canvas>}
       </div>
 
-      {/* 4. EDITORIAL SCROLL NARRATIVE LAYERS */}
+      {/* 4. EDITORIAL SCROLL NARRATIVE SECTIONS */}
       <main className="scrollytelling-container">
         
         {/* SECTION 1: HERO / INTRO */}
-        <section className={`scroll-section ${activeIndex === 0 ? 'reveal-active' : ''}`} id="overview" data-section="0">
+        <section className="scroll-section" id="overview" data-section="0">
           <div className="section-content text-center hero-text">
             <h2 className="mono-label" data-animate="slide-up">01 // PRELUDE</h2>
             <h1 className="main-headline" data-animate="slide-up">
@@ -520,7 +462,7 @@ export default function App() {
         </section>
 
         {/* SECTION 2: HOROLOGICAL REVEAL */}
-        <section className={`scroll-section ${activeIndex === 1 ? 'reveal-active' : ''}`} id="craftsmanship" data-section="1">
+        <section className="scroll-section" id="craftsmanship" data-section="1">
           <div className="section-content left-aligned">
             <div className="content-card">
               <h2 className="mono-label" data-animate="slide-up">02 // ARCHITECTURE</h2>
@@ -537,8 +479,8 @@ export default function App() {
           </div>
         </section>
 
-        {/* SECTION 3: DEEP-SEA ENGINEERING WITH TECH SPEC TABS */}
-        <section className={`scroll-section ${activeIndex === 2 ? 'reveal-active' : ''}`} id="movement" data-section="2">
+        {/* SECTION 3: DEEP-SEA ENGINEERING */}
+        <section className="scroll-section" id="movement" data-section="2">
           <div className="section-content right-aligned">
             <div className="content-card specs-card">
               <h2 className="mono-label" data-animate="slide-up">03 // CALIBRE & PRESSURE</h2>
@@ -546,96 +488,18 @@ export default function App() {
                 Uncompromising <br />Deep-Sea Control.
               </h1>
               
-              {/* Interactive Specifications Tabs Selector */}
-              <div className="specs-tabs-container" data-animate="slide-up">
-                <button 
-                  className={`spec-tab-btn ${activeSpecTab === 'movement' ? 'active' : ''}`}
-                  onClick={() => { playBezelTick(); setActiveSpecTab('movement'); }}
-                  onMouseEnter={handleHoverEvent}
-                >
-                  Calibre CFB
-                </button>
-                <button 
-                  className={`spec-tab-btn ${activeSpecTab === 'casing' ? 'active' : ''}`}
-                  onClick={() => { playBezelTick(); setActiveSpecTab('casing'); }}
-                  onMouseEnter={handleHoverEvent}
-                >
-                  Casing & Crystal
-                </button>
-                <button 
-                  className={`spec-tab-btn ${activeSpecTab === 'dive' ? 'active' : ''}`}
-                  onClick={() => { playBezelTick(); setActiveSpecTab('dive'); }}
-                  onMouseEnter={handleHoverEvent}
-                >
-                  Dive Shield
-                </button>
-              </div>
-
-              {/* Specs Panels */}
-              <div className="specs-panel-content" data-animate="slide-up">
-                {activeSpecTab === 'movement' && (
-                  <ul className="editorial-bullets animated-panel">
-                    <li>
-                      <span className="bullet-number">CFB</span>
-                      <div className="bullet-text">
-                        <strong>Calibre CFB A2050</strong>
-                        <p>Swiss-made automatic chronometer movement, COSC certified, featuring 33 jewels and 38-hour power reserve.</p>
-                      </div>
-                    </li>
-                    <li>
-                      <span className="bullet-number">OSC</span>
-                      <div className="bullet-text">
-                        <strong>Peripheral Rotor Winding</strong>
-                        <p>Innovative bidirectional peripheral rotor winding mechanism ensures uncompromised thinness and visibility.</p>
-                      </div>
-                    </li>
-                  </ul>
-                )}
-
-                {activeSpecTab === 'casing' && (
-                  <ul className="editorial-bullets animated-panel">
-                    <li>
-                      <span className="bullet-number">CER</span>
-                      <div className="bullet-text">
-                        <strong>Ceramic Unidirectional Bezel</strong>
-                        <p>Scratch-resistant green ceramic insert with a highly legible 60-minute scale for absolute safety during decompression.</p>
-                      </div>
-                    </li>
-                    <li>
-                      <span className="bullet-number">SAP</span>
-                      <div className="bullet-text">
-                        <strong>Anti-Reflective Sapphire</strong>
-                        <p>Double anti-reflective coating on a domed sapphire crystal ensures crystal-clear visual clarity in extreme glare.</p>
-                      </div>
-                    </li>
-                  </ul>
-                )}
-
-                {activeSpecTab === 'dive' && (
-                  <ul className="editorial-bullets animated-panel">
-                    <li>
-                      <span className="bullet-number">500M</span>
-                      <div className="bullet-text">
-                        <strong>Titanium Pressure Chamber</strong>
-                        <p>Sealed structure rated up to 50 bar (500 meters) of extreme underwater force.</p>
-                      </div>
-                    </li>
-                    <li>
-                      <span className="bullet-number">HE</span>
-                      <div className="bullet-text">
-                        <strong>Helium Escape Valve</strong>
-                        <p>Automatic valve prevents watch crystal expansion blowout during professional saturation dive ascents.</p>
-                      </div>
-                    </li>
-                  </ul>
-                )}
-              </div>
+              <SpecsTabs 
+                activeSpecTab={activeSpecTab}
+                setActiveSpecTab={setActiveSpecTab}
+                handleHoverEvent={handleHoverEvent}
+                playBezelTick={playBezelTick}
+              />
             </div>
           </div>
         </section>
 
         {/* SECTION 4: ARTISTRY & STRAP CONFIGURATOR */}
-        <section className={`scroll-section ${activeIndex === 3 ? 'reveal-active' : ''}`} id="specs" data-section="3">
+        <section className="scroll-section" id="specs" data-section="3">
           <div className="section-content left-aligned">
             <div className="content-card configurator-card">
               <h2 className="mono-label" data-animate="slide-up">04 // MATERIALS CONFIGURATOR</h2>
@@ -646,445 +510,165 @@ export default function App() {
                 Customize your Patravi ScubaTec Verde to match your next dive challenge. Toggle our premium luxury configurations:
               </p>
               
-              {/* Swatch Selector Controls */}
-              <div className="strap-configurator-swatches" data-animate="slide-up">
-                <button 
-                  className={`swatch-btn textile ${selectedStrap === 'textile' ? 'active' : ''}`}
-                  onClick={() => { playBezelTick(); setSelectedStrap('textile'); }}
-                  onMouseEnter={handleHoverEvent}
-                  title="Woven Green Eco-Textile"
-                >
-                  <span className="swatch-color green-textile"></span>
-                  <span className="swatch-name">TEXTILE</span>
-                </button>
-                
-                <button 
-                  className={`swatch-btn rubber ${selectedStrap === 'rubber' ? 'active' : ''}`}
-                  onClick={() => { playBezelTick(); setSelectedStrap('rubber'); }}
-                  onMouseEnter={handleHoverEvent}
-                  title="Signature Wave Black Rubber"
-                >
-                  <span className="swatch-color black-rubber"></span>
-                  <span className="swatch-name">RUBBER</span>
-                </button>
-                
-                <button 
-                  className={`swatch-btn titanium ${selectedStrap === 'titanium' ? 'active' : ''}`}
-                  onClick={() => { playBezelTick(); setSelectedStrap('titanium'); }}
-                  onMouseEnter={handleHoverEvent}
-                  title="Sandblasted Titanium Link"
-                >
-                  <span className="swatch-color titanium-metal"></span>
-                  <span className="swatch-name">TITANIUM</span>
-                </button>
-              </div>
-
-              {/* Dynamic Showcase Text & Mockup Box */}
-              <div className="configurator-showcase" data-animate="slide-up">
-                <div className="showcase-visual-overlay">
-                  <div className={`mockup-strap-visual ${selectedStrap}`}></div>
-                </div>
-                
-                <div className="showcase-details">
-                  {selectedStrap === 'textile' && (
-                    <>
-                      <strong>Eco-Textile Woven Green</strong>
-                      <p>Double-reinforced green woven textile made entirely from ocean-recovered plastic bottles, overlayed on premium vulcanized rubber. Optimized for lightweight flexibility.</p>
-                      <span className="price-tag">RESERVATION INCLUDED // $6,900 CHF</span>
-                    </>
-                  )}
-                  {selectedStrap === 'rubber' && (
-                    <>
-                      <strong>Signature Wave Black Rubber</strong>
-                      <p>Professional tactical black elastomer rubber strap with textured geometric decompression relief wave designs and adjustable diving extension buckle.</p>
-                      <span className="price-tag">RESERVATION INCLUDED // $6,800 CHF</span>
-                    </>
-                  )}
-                  {selectedStrap === 'titanium' && (
-                    <>
-                      <strong>Brushed Grade 5 Titanium</strong>
-                      <p>Hyper-durable, sandblasted titanium metallic link bracelet with standard luxury folding safety clasp and integrated wet-suit slider expansion locks.</p>
-                      <span className="price-tag">PREMIUM OPTION // $7,400 CHF</span>
-                    </>
-                  )}
-                </div>
-              </div>
+              <StrapConfigurator 
+                selectedStrap={selectedStrap}
+                setSelectedStrap={setSelectedStrap}
+                handleHoverEvent={handleHoverEvent}
+                playBezelTick={playBezelTick}
+              />
             </div>
           </div>
         </section>
 
-        {/* SECTION 5: REASSEMBLY & CONCIERGE SCHEDULER WIZARD */}
-        <section className={`scroll-section ${activeIndex === 4 ? 'reveal-active' : ''}`} id="boutique" data-section="4">
+        {/* SECTION 5: REASSEMBLY & CONCIERGE SCHEDULER */}
+        <section className="scroll-section" id="boutique" data-section="4">
           <div className="section-content text-center hero-text cta-section">
             <h2 className="mono-label" data-animate="slide-up">05 // CHRONOLOGY</h2>
             
-            {bookingStep === 3 ? (
-              // Booking Complete State
-              <div className="booking-wizard success-wizard" data-animate="slide-up">
-                <div className="success-icon-badge">●</div>
-                <h1 className="main-headline final-headline">Boutique Appointment Secured</h1>
-                <p className="editorial-body success-desc">
-                  Thank you, <strong>{bookingData.name}</strong>. Your private horological viewing session has been registered at our <strong>{bookingData.boutique}</strong>.
-                </p>
-                <div className="vip-ticket-badge">
-                  <div className="ticket-field">
-                    <span>CONFIRMATION ID:</span>
-                    <strong>CFB-{Math.floor(Math.random() * 8999 + 1000)}-VIP</strong>
-                  </div>
-                  <div className="ticket-field">
-                    <span>SCHEDULED TIME:</span>
-                    <strong>{bookingData.date} @ {bookingData.time}</strong>
-                  </div>
-                </div>
-                <button 
-                  className="cta-button-large reset-booking-btn"
-                  onClick={() => { playBezelTick(); setBookingStep(0); }}
-                  onMouseEnter={handleHoverEvent}
-                >
-                  Book Another Appointment
-                </button>
-              </div>
-            ) : (
-              // Active Booking States
-              <>
-                <h1 className="main-headline final-headline" data-animate="slide-up">
-                  {bookingStep === 0 && 'Master the Ocean. Defy Time.'}
-                  {bookingStep === 1 && 'Select View Date & Time'}
-                  {bookingStep === 2 && 'Submit VIP Details'}
-                </h1>
-                
-                <h3 className="sub-headline final-sub" data-animate="slide-up">
-                  {bookingStep === 0 && 'Patravi ScubaTec Verde. Your partner in exploration.'}
-                  {bookingStep === 1 && `Boutique Session // ${bookingData.boutique}`}
-                  {bookingStep === 2 && 'Verify client contact information for your private viewing'}
-                </h3>
-                
-                {bookingStep === 0 && (
-                  <div className="cta-buttons-group" data-animate="slide-up">
-                    <button 
-                      className="cta-button-large glow-btn"
-                      onClick={() => { playBezelTick(); setIsCartOpen(true); }}
-                      onMouseEnter={handleHoverEvent}
-                    >
-                      Experience Patravi
-                    </button>
-                    
-                    <button 
-                      className="text-link-button"
-                      onClick={() => { playBezelTick(); setBookingStep(1); }}
-                      onMouseEnter={handleHoverEvent}
-                    >
-                      Book a Viewing <span className="arrow-right">→</span>
-                    </button>
-                  </div>
-                )}
-
-                {/* Booking Wizard container */}
-                {bookingStep > 0 && (
-                  <div className="booking-wizard-box" data-animate="slide-up">
-                    
-                    {/* WIZARD STEP 1: DATE & TIME SELECTOR */}
-                    {bookingStep === 1 && (
-                      <div className="wizard-step-panel">
-                        <div className="booking-boutique-selector">
-                          <label>BOUTIQUE SALON</label>
-                          <select 
-                            value={bookingData.boutique} 
-                            onChange={(e) => handleBookingChange('boutique', e.target.value)}
-                            onMouseEnter={handleHoverEvent}
-                          >
-                            <option value="Geneva Boutique">Geneva Boutique // Rue du Rhône 86</option>
-                            <option value="Zürich Boutique">Zürich Boutique // Bahnhofstrasse 53</option>
-                            <option value="New York Salon">New York Salon // Fifth Avenue 730</option>
-                          </select>
-                        </div>
-
-                        <label className="form-grid-label">CHOOSE DATE</label>
-                        <div className="calendar-grid-ui">
-                          {availableDates.map((item) => (
-                            <button
-                              key={item.val}
-                              className={`calendar-cell ${bookingData.date === item.val ? 'active' : ''}`}
-                              onClick={() => { playBezelTick(); handleBookingChange('date', item.val); }}
-                              onMouseEnter={handleHoverEvent}
-                            >
-                              {item.label}
-                            </button>
-                          ))}
-                        </div>
-
-                        <label className="form-grid-label">CHOOSE TIME</label>
-                        <div className="time-slots-ui">
-                          {availableTimes.map((t) => (
-                            <button
-                              key={t}
-                              className={`time-slot-btn ${bookingData.time === t ? 'active' : ''}`}
-                              onClick={() => { playBezelTick(); handleBookingChange('time', t); }}
-                              onMouseEnter={handleHoverEvent}
-                            >
-                              {t}
-                            </button>
-                          ))}
-                        </div>
-
-                        <div className="wizard-controls">
-                          <button 
-                            className="wizard-back-btn" 
-                            onClick={() => { playBezelTick(); setBookingStep(0); }}
-                            onMouseEnter={handleHoverEvent}
-                          >
-                            Cancel
-                          </button>
-                          <button 
-                            className="cta-button-large wizard-next-btn" 
-                            onClick={() => { playBezelTick(); setBookingStep(2); }}
-                            onMouseEnter={handleHoverEvent}
-                          >
-                            Continue
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* WIZARD STEP 2: VIP CONTACT FIELDS */}
-                    {bookingStep === 2 && (
-                      <form onSubmit={(e) => { e.preventDefault(); setBookingStep(3); }} className="wizard-step-panel client-form">
-                        <div className="form-row">
-                          <div className="form-group">
-                            <label>VIP CLIENT FULL NAME</label>
-                            <input 
-                              type="text" 
-                              required 
-                              placeholder="e.g. Sterling Archer" 
-                              value={bookingData.name}
-                              onChange={(e) => handleBookingChange('name', e.target.value)}
-                              onMouseEnter={handleHoverEvent}
-                            />
-                          </div>
-                          <div className="form-group">
-                            <label>EMAIL ADDRESS</label>
-                            <input 
-                              type="email" 
-                              required 
-                              placeholder="e.g. archer@isis.org" 
-                              value={bookingData.email}
-                              onChange={(e) => handleBookingChange('email', e.target.value)}
-                              onMouseEnter={handleHoverEvent}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="form-row">
-                          <div className="form-group">
-                            <label>CONTACT PHONE NUMBER</label>
-                            <input 
-                              type="tel" 
-                              required 
-                              placeholder="+41 22 780 1234" 
-                              value={bookingData.phone}
-                              onChange={(e) => handleBookingChange('phone', e.target.value)}
-                              onMouseEnter={handleHoverEvent}
-                            />
-                          </div>
-                          <div className="form-group">
-                            <label>CONCIERGE & DIETARY VIP REQUESTS</label>
-                            <input 
-                              type="text" 
-                              placeholder="Dietary requests or specific watch models you'd like to inspect" 
-                              value={bookingData.vipNotes}
-                              onChange={(e) => handleBookingChange('vipNotes', e.target.value)}
-                              onMouseEnter={handleHoverEvent}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="wizard-controls">
-                          <button 
-                            type="button" 
-                            className="wizard-back-btn" 
-                            onClick={() => { playBezelTick(); setBookingStep(1); }}
-                            onMouseEnter={handleHoverEvent}
-                          >
-                            Back
-                          </button>
-                          <button 
-                            type="submit" 
-                            className="cta-button-large wizard-submit-btn"
-                            onMouseEnter={handleHoverEvent}
-                          >
-                            Securing Appointment
-                          </button>
-                        </div>
-                      </form>
-                    )}
-
-                  </div>
-                )}
-              </>
-            )}
+            <ConciergeScheduler 
+              bookingStep={bookingStep}
+              setBookingStep={setBookingStep}
+              bookingData={bookingData}
+              handleBookingChange={handleBookingChange}
+              playBezelTick={playBezelTick}
+              handleHoverEvent={handleHoverEvent}
+              setIsCartOpen={setIsCartOpen}
+            />
           </div>
         </section>
       </main>
 
-      {/* 5. INTERACTIVE BOUTIQUE EXP GRID DRAWER */}
+      {/* 5. INTERACTIVE BOUTIQUE EXPERIENCE BOTTOM DRAWER */}
       <section className="boutique-drawer-section" id="experience">
+        {/* Ambient top glow line */}
+        <div className="boutique-glow-line" />
+
         <div className="boutique-container">
+          {/* Header */}
           <div className="boutique-header">
-            <span className="boutique-subtitle">GENÈVE // ZÜRICH // TOKYO // NEW YORK</span>
-            <h2 className="boutique-title">Secure Your Private Experience</h2>
-            <p className="boutique-desc">Connect with a Carl F. Bucherer specialist for a private, bespoke viewing of the Patravi ScubaTec Verde flagship luxury dive watch.</p>
+            <span className="boutique-eyebrow">
+              <span className="boutique-eyebrow-dot" />
+              PRIVATE BOUTIQUE NETWORK
+            </span>
+            <h2 className="boutique-title">Secure Your Private<br /><span className="boutique-title-accent">Horological Experience</span></h2>
+            <p className="boutique-desc">
+              Our dedicated concierge specialists await. Reserve an intimate, one-on-one session with the Patravi ScubaTec Verde — in the city of your choosing.
+            </p>
           </div>
-          
+
+          {/* Location Cards */}
           <div className="boutique-grid">
+
+            {/* Geneva */}
             <div className="boutique-card">
-              <span className="boutique-city">Geneva Boutique</span>
-              <p className="boutique-address">Rue du Rhône 86, 1204 Genève</p>
-              <button 
-                className="boutique-action-btn"
-                onClick={() => { playBezelTick(); setBookingData(prev => ({ ...prev, boutique: 'Geneva Boutique' })); setBookingStep(1); }}
-                onMouseEnter={handleHoverEvent}
-              >
-                Schedule Appointment
-              </button>
+              <div className="boutique-card-top">
+                <div className="boutique-location-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+                </div>
+                <div className="boutique-avail-badge">
+                  <span className="avail-dot" />
+                  Available Today
+                </div>
+              </div>
+              <div className="boutique-card-body">
+                <span className="boutique-city-tag">SWITZERLAND — GVA</span>
+                <h3 className="boutique-city">Geneva Boutique</h3>
+                <p className="boutique-address">Rue du Rhône 86<br />1204 Genève, CH</p>
+                <p className="boutique-hours">Mon–Sat · 10:00–19:00</p>
+              </div>
+              <div className="boutique-card-footer">
+                <button
+                  className="boutique-cta-btn"
+                  onClick={() => { playBezelTick(); setBookingData(prev => ({ ...prev, boutique: 'Geneva Boutique' })); setBookingStep(1); }}
+                  onMouseEnter={handleHoverEvent}
+                >
+                  <span>Book a Viewing</span>
+                  <svg className="btn-arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </button>
+              </div>
             </div>
+
+            {/* Zürich — featured */}
+            <div className="boutique-card boutique-card--featured">
+              <div className="boutique-card-top">
+                <div className="boutique-location-icon boutique-location-icon--featured">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+                </div>
+                <div className="boutique-avail-badge boutique-avail-badge--featured">
+                  <span className="avail-dot avail-dot--featured" />
+                  Flagship Maison
+                </div>
+              </div>
+              <div className="boutique-card-body">
+                <span className="boutique-city-tag">SWITZERLAND — ZRH</span>
+                <h3 className="boutique-city">Zürich Flagship</h3>
+                <p className="boutique-address">Bahnhofstrasse 53<br />8001 Zürich, CH</p>
+                <p className="boutique-hours">Mon–Sat · 09:30–19:30</p>
+              </div>
+              <div className="boutique-card-footer">
+                <button
+                  className="boutique-cta-btn boutique-cta-btn--primary"
+                  onClick={() => { playBezelTick(); setBookingData(prev => ({ ...prev, boutique: 'Zürich Boutique' })); setBookingStep(1); }}
+                  onMouseEnter={handleHoverEvent}
+                >
+                  <span>Book a Viewing</span>
+                  <svg className="btn-arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </button>
+              </div>
+            </div>
+
+            {/* New York */}
             <div className="boutique-card">
-              <span className="boutique-city">Zürich Boutique</span>
-              <p className="boutique-address">Bahnhofstrasse 53, 8001 Zürich</p>
-              <button 
-                className="boutique-action-btn"
-                onClick={() => { playBezelTick(); setBookingData(prev => ({ ...prev, boutique: 'Zürich Boutique' })); setBookingStep(1); }}
-                onMouseEnter={handleHoverEvent}
-              >
-                Schedule Appointment
-              </button>
+              <div className="boutique-card-top">
+                <div className="boutique-location-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+                </div>
+                <div className="boutique-avail-badge">
+                  <span className="avail-dot" />
+                  Available Today
+                </div>
+              </div>
+              <div className="boutique-card-body">
+                <span className="boutique-city-tag">UNITED STATES — JFK</span>
+                <h3 className="boutique-city">New York Salon</h3>
+                <p className="boutique-address">730 Fifth Avenue<br />New York, NY 10019</p>
+                <p className="boutique-hours">Mon–Sun · 10:00–20:00</p>
+              </div>
+              <div className="boutique-card-footer">
+                <button
+                  className="boutique-cta-btn"
+                  onClick={() => { playBezelTick(); setBookingData(prev => ({ ...prev, boutique: 'New York Salon' })); setBookingStep(1); }}
+                  onMouseEnter={handleHoverEvent}
+                >
+                  <span>Book a Viewing</span>
+                  <svg className="btn-arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </button>
+              </div>
             </div>
-            <div className="boutique-card">
-              <span className="boutique-city">New York Salon</span>
-              <p className="boutique-address">Fifth Avenue 730, New York, NY 10019</p>
-              <button 
-                className="boutique-action-btn"
-                onClick={() => { playBezelTick(); setBookingData(prev => ({ ...prev, boutique: 'New York Salon' })); setBookingStep(1); }}
-                onMouseEnter={handleHoverEvent}
-              >
-                Schedule Appointment
-              </button>
-            </div>
+
           </div>
-          
+
+          {/* Footer strip */}
           <div className="boutique-footer">
-            <p className="copylink">© 2026 Carl F. Bucherer. All Rights Reserved. Engineered in Switzerland.</p>
+            <div className="boutique-footer-inner">
+              <span className="boutique-footer-brand">Carl F. Bucherer · Since 1888</span>
+              <p className="copylink">© 2026 Carl F. Bucherer. All Rights Reserved. Engineered in Switzerland.</p>
+              <span className="boutique-footer-cert">COSC Certified · ISO 6425 · 500M WR</span>
+            </div>
           </div>
         </div>
       </section>
 
       {/* 6. VIP CART CHECKOUT SLIDING DRAWER OVERLAY */}
-      <div 
-        className={`cart-drawer-overlay ${isCartOpen ? 'open' : ''}`} 
-        onClick={() => { playBezelTick(); setIsCartOpen(false); }}
-      >
-        <div className="cart-drawer" onClick={(e) => e.stopPropagation()}>
-          <div className="cart-drawer-header">
-            <h3>Bespoke VIP Reservation</h3>
-            <button 
-              className="close-drawer-btn" 
-              onClick={() => { playBezelTick(); setIsCartOpen(false); }}
-              onMouseEnter={handleHoverEvent}
-            >
-              ✕
-            </button>
-          </div>
-
-          {cartSuccess ? (
-            // Cart Success Modal
-            <div className="cart-success-view">
-              <div className="success-icon-badge">●</div>
-              <h3>Reservation Active</h3>
-              <p>Your luxury watch reservation deposit has been registered successfully. A VIP Concierge Specialist will call you within 15 minutes to coordinate your boutique sizing and secure insured delivery.</p>
-              
-              <div className="cart-item-summary">
-                <strong>Patravi ScubaTec Verde</strong>
-                <span>Strap Type: {selectedStrap.toUpperCase()}</span>
-                <span>Insured Deposit: $500.00 CHF</span>
-              </div>
-              
-              <button 
-                className="cta-button-large close-cart-success-btn"
-                onClick={() => { playBezelTick(); setIsCartOpen(false); setCartSuccess(false); }}
-                onMouseEnter={handleHoverEvent}
-              >
-                Return to Exhibition
-              </button>
-            </div>
-          ) : (
-            // Cart Reservation Form
-            <form onSubmit={handleCheckoutSubmit} className="cart-checkout-form">
-              <div className="cart-items-list">
-                <div className="cart-product-item">
-                  <div className={`cart-product-visual ${selectedStrap}`}></div>
-                  <div className="cart-product-details">
-                    <h4>Patravi ScubaTec Verde</h4>
-                    <span className="cart-strap-desc">Configured: {selectedStrap.toUpperCase()} Strap</span>
-                    <span className="cart-price">Total Value: {selectedStrap === 'titanium' ? '$7,400 CHF' : selectedStrap === 'rubber' ? '$6,800 CHF' : '$6,900 CHF'}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Deposit Billing details */}
-              <div className="cart-deposit-charge">
-                <div className="deposit-row">
-                  <span>Refundable Viewing Deposit:</span>
-                  <strong>$500.00 CHF</strong>
-                </div>
-                <p className="deposit-disclaimer">Charging a fully refundable reservation deposit guarantees that this timepiece is immediately withdrawn from active public display and reserved for your inspection.</p>
-              </div>
-
-              {/* Payment Fields */}
-              <div className="payment-fields-section">
-                <div className="form-group">
-                  <label>CARDHOLDER NAME</label>
-                  <input type="text" required placeholder="Sterling Archer" onMouseEnter={handleHoverEvent} />
-                </div>
-                <div className="form-group">
-                  <label>SECURE CREDIT CARD NUMBER</label>
-                  <input type="text" maxLength="19" required placeholder="4000 1234 5678 9010" onMouseEnter={handleHoverEvent} />
-                </div>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>EXP DATE</label>
-                    <input type="text" maxLength="5" required placeholder="06/30" onMouseEnter={handleHoverEvent} />
-                  </div>
-                  <div className="form-group">
-                    <label>CVV CODE</label>
-                    <input type="text" maxLength="3" required placeholder="007" onMouseEnter={handleHoverEvent} />
-                  </div>
-                </div>
-              </div>
-
-              {/* Safety Assurances */}
-              <div className="checkout-trust-badges">
-                <div className="trust-badge-item">
-                  <span className="badge-icon">🛡️</span>
-                  <div className="badge-text">
-                    <strong>Armored Insured Courier</strong>
-                    <p>Insured complimentary Swiss transit.</p>
-                  </div>
-                </div>
-                <div className="trust-badge-item">
-                  <span className="badge-icon">🔬</span>
-                  <div className="badge-text">
-                    <strong>5-Year Chronometer Warranty</strong>
-                    <p>Certified Swiss horology guarantees.</p>
-                  </div>
-                </div>
-              </div>
-
-              <button type="submit" className="cta-button-large secure-checkout-btn" onMouseEnter={handleHoverEvent}>
-                Confirm Reservation // $500 CHF
-              </button>
-            </form>
-          )}
-        </div>
-      </div>
+      <CartDrawer 
+        isCartOpen={isCartOpen}
+        setIsCartOpen={setIsCartOpen}
+        selectedStrap={selectedStrap}
+        cartSuccess={cartSuccess}
+        setCartSuccess={setCartSuccess}
+        playBezelTick={playBezelTick}
+        handleHoverEvent={handleHoverEvent}
+      />
     </>
   );
 }
